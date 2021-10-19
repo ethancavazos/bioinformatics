@@ -1,0 +1,167 @@
+Biological Sequence Analysis {#sec:sequence-analysis}
+============================
+Strings in R {#sec:strings-in-r}
+------------
+The data type known as "strings" in most programming languages is
+generally dealt with using character vectors in R, as we have seen so
+far. Strings are fundamental data structures in pretty much any
+context in computer science, but they are of special importance in
+computational biology since they provide a natural representation for
+biological sequences, be they DNA, RNA, or protein.
+
+A few of the basic operations you can perform with character vectors
+in R include:
+
+### Querying string length {#sec:querying-string-length}
+Unlike most other languages, the standard R function for finding out
+how long a string---or, more generally, vector of strings, since R
+sees a single string as just a character vector of length 1---is not
+named length or any variant thereof, but instead `nchar`:
+
+```{r}
+# this string is a vector of length one
+length("This is a string of 58 characters but a vector of length 1")
+```
+
+```{r}
+nchar("This is a string of 58 characters but a vector of length 1")
+```
+
+```{r}
+stringVec = c("string 1", "string 2 is longer")
+nchar(stringVec)  ## returns integer vector
+```
+
+### Concatenating strings {#sec:concatenating-strings}
+Using `paste` or `paste0`:
+
+```{r}
+s = paste("long", "horn")
+s
+```
+
+```{r}
+s = paste0("long", "horn")
+s
+```
+
+`paste0` is really just `paste` with the `sep`arator set to the
+empty string instead of a single space:
+
+```{r}
+paste("long", "horn", sep="")   ## same as paste0
+```
+
+```{r}
+paste("long", "horn", sep="_SEPARATOR_")
+```
+
+You can `paste` together as many strings as you want:
+
+```{r}
+paste("abc", "def", "gh", "iklm", sep="_:_")
+```
+
+`paste` and `paste0` can both be used with character `vector`s
+of length > 1 as well; the best way to understand what they do in
+such cases is to study some examples:
+
+```{r}
+ ## can use the collapse argument to paste a single vector together:
+# this is useful if we were trying to paste together a bunch of string vectors 
+s = paste(c("long", "horn"), collapse="")
+s
+```
+
+```{r}
+ ## compare to default (no collapse argument provided) behavior:
+paste(c("long", "horn"))
+```
+
+```{r}
+ ## or
+paste(c("long", "horn"), "suffix")
+```
+
+```{r}
+ ## or even:
+paste(c("long", "horn"),
+      c("suffix1", "suffix2"))
+```
+
+### Taking substrings {#sec:taking-substrings}
+Using `substr`:
+
+```{r}
+s = "longhorn"
+substr(s, 1, 4)         ## returns first 4 characters of s
+```
+
+```{r}
+substr(s, 2, 3)         ## returns substring with only 2 characters
+```
+
+```{r}
+substr(s, 5, nchar(s))  ## returns suffix of s starting at 5th character
+```
+
+```{r}
+substr(stringVec, 3, nchar(stringVec))
+```
+
+### String splitting {#sec:string-splitting}
+String splitting in R can be done using `strsplit`. Because strings
+are intrinsically embedded in character vectors in R, the output of
+`strsplit` is provided as a nested `list` of `vectors`, with one
+element of the outer `list` for each element of the input character
+`vector`:
+
+```{r}
+stringVec
+strsplit(stringVec, split="ng")
+length(strsplit(stringVec, split="ng"))
+```
+
+```{r}
+strsplit(stringVec, split="ng")[[2]]
+```
+
+```{r}
+# strsplit(s)
+strsplit(s, split="ng") ## still a list of vectors!
+```
+
+```{r}
+#  strsplit returns a list  of same length as the input vector
+strsplit(s, split="ng")[[1]]
+```
+
+```{r}
+strsplit(s, split="ng")[[1]][[2]]
+```
+
+### Pattern matching {#sec:pattern-matching}
+Using `grepl`: logical
+
+```{r}
+grepl("string", stringVec)
+```
+
+```{r}
+grepl("longer", stringVec)
+```
+
+```{r}
+grepl(s, stringVec)     ## "longhorn" not in either element of stringVec
+```
+
+### Pattern replacement {#sec:pattern-replacement}
+Using `gsub` (for global substitute):
+
+```{r}
+gsub("string", "longhorn", stringVec)
+```
+
+```{r}
+gsub("long", "stringi", stringVec)
+```
