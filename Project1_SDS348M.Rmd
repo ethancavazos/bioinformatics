@@ -1,0 +1,166 @@
+---
+title: "project 1"
+author: "Ethan Cavazos"
+date: "10/10/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#install.packages("tidyverse")
+library("tidyverse")
+library(tidyr)
+#install.packages("tidyr")
+library("dplyr")
+#install.packages("lubridate")
+library(lubridate)
+#install.packages(devtools)
+#devtools::install_github("tidyverse/tidyr")
+#install.packages("tidycensus")
+library(tidycensus)
+#install.packages("tibble")
+library(tibble)
+```
+
+## Project 1
+
+```{r}
+#intro! :D
+#terrorist group data 
+terrorG <- read.csv("TerroristGroups.csv", header=TRUE, sep=",")
+
+
+#Global Terrorism Database information
+trrGTD1 <- read.csv("GlobalTerrorismDatabase.csv", header=TRUE, sep=",")
+trrGTD <- trrGTD1[sample(1:nrow(trrGTD1), 100,
+   replace=FALSE),]
+#glimpse(trrGTD)
+
+#common variable = country!
+```
+
+# Preparing my Data:
+
+Preface:
+
+In the following chunks I performed a few operations that ultimately reduced the size and complexity of these sets. This is because I have enormous difficulty with visualizing and understanding large sets of data. Additionally, I was more interested in some variables and countries than others and thought I would have more fun working with reduced sets. 
+
+The sets of data I chose were on terrorist groups and attacks. The first is from a data set provided by Joshua Tchantret (https://jtschantret.com/data/) and the second was from a set in the Gloabl Terrorism Database (GTD)! The first set contained information on historical terror groups relevant between 1860-1969 suh as: group name, ideology, country, ambiguity status, and Start and End year. The most interesting information from this set was its ambiguity status. I had never imagined that a terror group might be undefined in our understanding of its allignment! I was intrigued to say the least but you might see that later on.
+
+The second set was from the GTD had tons of data on terrorist attacks from around the world. It had so many variables, I was fairly overwhelmed. Beside their shared variable 'Country', this data set had many, many other variables such as: City, region, who the attack was on, outcome of attack (description), target of attack, nationality of the attack target, etectera. This data set I found more confusing not only due to its size but by the existence of secondary and tertiary variables. For example, for its Attack-Type variable, it also conatained 2 additional variables that I assumed were for further categorization or tagging to make searches more accurate. However, the frequency at which variables contained even a second data point - let alone a third - was extremely low! 
+
+Towrap up, I chose these datasets because I wanted to evaluate something interesting (world events), relevant, and understandable. I had spent many hours looking at sets with data on drugs, side effetcts, and everything related and I found myslef spending a disproportionate amount of time studying related topics to understand the data. Between the two sets, I do expect to see similarities between countries in terms of attack events and terror groups but I can see that the data is fairly different and this is all I am expecting before diving in.
+
+```{r Terror Groups, echo=FALSE}
+#terror groups 
+
+terrorG %>% select(Country, everything(), Ambiguous, -EndYear) -> terrorG_1
+terrorG_1
+
+glimpse(terrorG_1)
+
+```
+
+Mutate() and vetting my data:
+
+Here, I went ahead and deselected certain variables based on relevance, conveniennce, and clarity. I also used the Mutate() function to create a 'Date' variable based on the provided time data using library(lubridate) - very cool.
+
+```{r GTD, echo=FALSE}
+#Global Terrorism Database information
+
+#retaining most relevant and interesting variables 
+trrGTD %>% select(Country = country_txt, year = iyear, month = imonth, day = iday, city, -region_txt, -provstate, AttackType = attacktype1_txt, -target1, -natlty1_txt, -latitude, -longitude) %>% mutate(Date = make_datetime(year, month, day)) %>% select(Country, Date, everything()) -> comp_trrGTD
+
+
+```
+
+Merging Datasets:
+
+Because I identified the 'Ambiguity' variable from the smaller, more straightword data as my point of interest, I performed a right join using this dataset as the RHS to preserve an Ambiguity datapoint in all rows. However, the caveat was that I lost a lot of data when I accounted for duplicates. 
+
+```{r}
+#Merging Datasets!
+
+right_join(comp_trrGTD, terrorG_1, by = "Country") %>% distinct(Country, .keep_all= TRUE) -> joinedTerrors
+
+#Nondistinct data kept
+right_join(comp_trrGTD, terrorG_1, by = "Country") -> joinedTerrorsFULL
+
+```
+
+Reshaping:
+
+I decided to reshape my data after I had merged them. I ran a really simple untidy task which worked well. However, when I attempted to retidy, I was met with the error below. To my understanding, it is saying that R doesn't know how to place each observation due to duplicate values. 
+
+```{r}
+
+#reshaping ---> untidy dataset
+
+joinedTerrors %>% pivot_longer(cols=c("Country", "Group"), names_to = "Vars", values_to = "AllInfo") -> newUntidyJoined
+
+
+#retidying
+newUntidyJoined %>% pivot_wider(names_from = "Vars", values_from = "AllInfo")  
+```
+
+Reshaping continued:
+
+Upon furter investigation of the original merged dataset, I found the likely culprits. After untidying, two observations became identical. Additionally, the data that was untidied both contained a common string of characters ("Palestein"). This is my hypothesis on why R was unable to reshape the data how I wanted.
+
+```{r untidy, echo=FALSE}
+
+newUntidyJoined %>% pivot_wider(names_from = "Vars", values_from = "AllInfo", values_fn = list(AllInfo = length)) %>% slice(64) %>% view()
+
+#noncooperativerows:
+newUntidyJoined %>% group_by(City) %>% filter(City == "Beirut")
+
+#deleting those rows:
+newUntidyJoined %>% filter(City != "Beirut") %>% view() ->BetterUntidy
+
+#Retidying2.0
+BetterUntidy %>% pivot_wider(names_from = "Vars", values_from = "AllInfo")
+
+```
+
+Reshaping3.0:
+
+I tested my theory and it did not work! Which means there were other duplicates causing the problem. I looked further and couldn't figure out which ones they were to much dismay. 
+
+Data Visualization:
+
+Because I excluded all duplicates and was left with a very limited dataset, I reverted back to the original merged dataset for summary statistics. In the interest of time and of attempting to convey data on Ambiguous terror groups, I generated two bar plots with ggplot. 
+
+Both essentially represent the same thing and are visual representations on the proportion of ambiguous-classified terror groups. The larger of the two show the relative proportion of ambiguous groups. Countries with the highest proportion of ambiguous terror groups were Greece, Afghanistan, Russia, and Romania with teh USA and Russia having the highest incidences of terrorist activities. The larger the bar, the larger the precentage of non-conforming terror groups in that country. I thought this was a little bit of a creative way to represent this unfamiliar variable. Countries with small or no bars have little to no undefined terror groups and thus might be easier to understand or safer to establish foreign relations with.
+
+The second plot - the faceted geombar plot - represented this data in a slightly different  way. This plot was grouped by both City and Country so each facet represents the proportion of these mysterious terror groups per per country with a bar for every listed city listed. countries with more bars have more terror groups overall. However, the color of the bars must also be noted. Proportionality of ambiguous terror groups is represented by a color gradient where light blue bars indicate a completely ambiguous terror group presence. Dark bars represent little to no presence of these type of groups. 
+
+```{r, echo = FALSE}
+#Showing the Proportion of Ambiguous-classified Terrorist Groups by Country
+joinedTerrorsFULL %>% group_by(Country) %>% summarize(PropAmbig=mean(Ambiguous,na.rm=T), sdAmbig = sd(Ambiguous, na.rm = T), n=n(), seAmbig = sdAmbig/sqrt(n)) %>% slice(2:n()) %>% view() -> Country
+
+#PLOT1 
+
+#Countries' Ambiguous -> color gradient to show proportionality
+Country %>% ggplot(aes(x = Country, y = PropAmbig)) + 
+    geom_bar(stat = "identity", color = "light green") + scale_y_continuous(breaks=seq(0,1,0.2)) + 
+  theme(axis.text.x = element_text(size = 4.5, angle = 45, hjust = 1)) + labs(title = "Terror Group Ambiguity Status by Country",
+       subtitle = "This plot provides a visual for comparing the proportion of Ambiguous-stated terror groups between countries",
+       y = "Proportion of Ambiguous Terror Groups")
+
+#Grouping by Country and City
+joinedTerrorsFULL %>% group_by(Country, City) %>% summarize(PropAmbig=mean(Ambiguous,na.rm=T), sdAmbig = sd(Ambiguous, na.rm = T), n=n(), seAmbig = sdAmbig/sqrt(n)) -> CountryNCity
+
+
+#PLOT2
+
+CountryNCity %>% ggplot(aes(x = City,fill = PropAmbig)) + xlab("hi") +
+  geom_bar(position = "fill") + scale_y_continuous(breaks=seq(0,1,0.5)) + theme(axis.text.y = element_text(size = 5)) +
+  theme(axis.text.x = element_blank(), axis.ticks.x = element_blank()) +
+  facet_wrap(~Country) + 
+  labs(title = "Terror Group Ambiguity Status by City and Country", subtitle = "A visual plot to note the count of terror groups and ambiguity status per country", y = "Proportion of Ambiguous Terror Groups", x = "")
+
+
+joinedTerrorsFULL %>% group_by(AttackType) %>% summarize(PropAmbig=mean(Ambiguous,na.rm=T), sdAmbig = sd(Ambiguous, na.rm = T), n=n(), seAmbig = sdAmbig/sqrt(n))
+
+```
+
