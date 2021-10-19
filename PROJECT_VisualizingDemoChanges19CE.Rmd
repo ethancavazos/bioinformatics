@@ -1,0 +1,218 @@
+---
+title: "Visualizing Demographics from 1790 to 1870 in America"
+author: "Ethan Cavazos"
+date: "5/4/2021"
+output: 
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(colorspace)
+library(broom)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+*Ethan Cavazos enc527*
+
+This is the dataset used in this project:
+
+```{r message = FALSE}
+# load in data
+census <- readr::read_csv(
+  'https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-06-16/census.csv'
+  )
+
+# blackpast <- readr::read_csv(
+#   'https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-06-16/blackpast.csv'
+#   )
+# slave_routes <- readr::read_csv(
+#   'https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-06-16/slave_routes.csv'
+#   )
+# african_names <- readr::read_csv(
+#   'https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-06-16/african_names.csv'
+#   )
+
+```
+
+Link to the dataset: *https://github.com/rfordatascience/tidytuesday/blob/master/data/2020/2020-06-16/readme.md*
+
+### **Part 1**
+
+**Question:** *Were there differences in population makeup between regions and how did the emancipation of enslaved people in 1863 affect these demographics?*
+
+**Introduction:** I am working with the `census` dataset containing 8 columns presenting decennial demographic data on white and black (enslaved and free) populations from 1790 to 1870. Each row represents a single decade's demographics in one of 4 distinct regions. Between all regions, 9 geographical distinctions made of the U.S.: New England, Middle Atlantic, East North Central, West North Central, South Atlantic, East South Central, West South Central, Mountain, Pacific. This data lacks additional racially distinct data (beside simply 'white' or 'black') as 'white' and 'black' were socially normalized to represent all 'white' and 'non-white' persons, respectively.
+
+Evaluating demographic changes will require the following columns:
+
+* `year`: Decades of interest from 1790 to 1870
+
+* `white`: Total number of white inhabitants recorded
+
+* `black`: Total number of black inhabitants recorded
+
+* `black_free`: Total number of free black inhabitants recorded
+
+* `black_slaves`: Total number of free enslaved black persons recorded
+
+* `region`: Geographic regions (including totals as 'US Total'): Northeast, Midwest, South, West
+
+**Approach:** As the Atlantic Slave Trade began in the 15th century and thus precedes the scope of this dataset, it would be useful to produce a summary of the demographics from the year closest to the beginning of era: 1790. Additionally, this decade saw the rise of cotton - a crop that proved vital to the U.S. economy. Thus, to begin I will produce a table summarizing population numbers and percentages per geographic region for 1790 to provide baseline values that represent the time for which we lack data. To this end I will utilize `group_by()` to group by region, then `mutate()` to produce population percentages with existing columns, and finally `select()` to eliminate non-relevant columns (such as `division` which will not be evaluated here). Additionally, I will utilize `filter()` to select data from the year 1790 only.
+
+To present changes in demographics over time, I intend on producing a line graph displaying population numbers through the 19th century faceted by region. To do so I will use `ggplot()`'s plotting power, specifically `geom_line()`. In order to produce these plots and to facet them, I will likely need to `group_by()` year and region and sum population numbers per region using `summarise()`.
+
+I will also produce a stacked-bar chart faceted by region showing the changes in population percentages between the decades of 1850, 1860, and 1870. This would effectively give a 'before', 'during', and 'after' snapshot of the U.S. population during the onset of the emancipation of slavery. This plot will need demographics and population numbers in a 'long' format and I will thus be utilizing `pivot_longer` here.
+
+**Analysis:**
+```{r}
+# Snapshot of the raw data
+census  %>% arrange(year)  %>% head(20)
+```
+
+```{r}
+# Replacing NAs for unknown region divisions
+census$division <- census$division  %>%  replace_na('Unspecified')
+
+# Order region data conventionally: 
+# North / Midwest / South / West
+north_south <- c("USA Total",  "Northeast",  "Midwest",   "South",     "West")
+
+# Refactor census regions
+census$region <- factor( as.character(census$region) , levels = north_south )
+
+# Re-roder dataframe
+census <- census[order(census$region), ]
+
+# SUMMARY TABLE
+# Filter for year 1790, 
+# Create Column reflecting percentages
+census %>% 
+  
+     filter(year == 1790) %>% 
+  
+     group_by(region) %>% 
+  
+     mutate(
+       Pct_Black_Pop_Enslaved = round( (black_slaves/black)*100 , 2 ) , 
+       Pct_Tot_Pop_Enslaved = round ( (black_slaves/total)*100 , 2) ) %>% 
+  
+     select( c(Region = region, 
+               Division = division, 
+               White_Pop =  white, 
+               Black_Pop = black, 
+               Black_Slaves_Pop =  black_slaves, 
+               Pct_Black_Pop_Enslaved, 
+               Pct_Tot_Pop_Enslaved) ) 
+
+```
+
+```{r}
+# LINE GRAPH: Plotting faceted population counts
+# Data transforming: pivot longer 
+regional_sums <- census %>% 
+  
+  group_by(year, region) %>% 
+  
+  summarise_at( vars(total, white, black, black_free, black_slaves), sum) %>%
+  
+    pivot_longer( 
+    cols = c(white, black_free, black_slaves),  
+    names_to = 'Demographic', 
+    values_to =  'Population')
+
+# Creating graphs
+regional_sums %>%  
+  
+  ggplot( aes(x = year, y = Population, Demographic)) + 
+  geom_line(aes(color = Demographic)) + 
+  facet_wrap(vars(region), scales = 'free') + 
+  scale_x_continuous(breaks = c(1800, 1830, 1860)) + 
+  scale_y_continuous(labels = scales::comma)
+```
+
+```{r}
+# STACKED BAR GRAPH
+# Create a regions vector to filter by region
+regions <- c('Northeast', 'Midwest', 'South')
+
+# Plot bar graphs
+regional_sums %>% 
+  
+  filter(region  %in% regions, year %in% c(1850, 1860, 1870)) %>% 
+  
+  ggplot( aes(x = '', y = Population, fill = Demographic)) + 
+  geom_col(position = 'fill') + 
+  facet_wrap(vars(region, year), scales = 'free')
+
+
+```
+
+**Discussion:** Quite a few aspects of the table and plots above are notable. Hereafter I address them independently in the order shown above.
+
+In this summary table, an incredibly notable aspect is the high percentage of enslaved persons in the U.S.: some 92% of all black people recorded in the U.S. during 1790 were enslaved. This is disturbing but not surprising as the horrors of slavery are taught and communicated enough such that we may understand it to be a significant institution upon which the United States operated during this era. However, this contrasts to the percentage of persons enslaved out of the total population: approximately 17% of the total U.S. population was enslaved. From these numbers alone we deduce that the number of black people as compared to the number of whites was somewhat low but that the vast majority of those persons were enslaved. In other words, *few black people lived and breathed air as free people in the U.S. in 1790.* Additionally, a keen eye may notice the lack of a few regions in this table. This is no mistake: data from the U.S.'s Midwest and West did not exist in 1790 as only 5% of Americans lived west of the Appalachian Mountains (USHistory.org). For additional context, the 13 colonies of the East Coast did not gain independence from Europe until a mere decade and a half prior to 1790 (1776). 
+
+Exemplifying changes in population numbers over the early to mid-19th century, the line graphs above display large increases in whites in all regions and ambiguous changes in population numbers for black people, both free and enslaved. The initial plot `USA Total` indeed displays totaled demographic numbers and leads us to assume an overall continuous increase in slaves until the 1860 decade where we see a steady decline and a steady increase in free black persons. This corroborates our knowledge of history as we know the emancipation of slaves to have occurred in 1863. Indeed, it is difficult to evaluate population changes for a few regions: the `Northeast`, the `Midwest`, and the `West.` Reminding ourselves of the significant lack of data for the West we must also remember that the Northeast and the Midwest were regions of the U.S. that comprised the Union during the Civil War (1861 - 65). In other words, these were regions whose economies were not wholly reliant of slavery. This is likely why we see such low population numbers for black persons. With this in mind, it is easier to understand why the `South` displays clearer trends and we may thus assume the `USA Totals` graph to be more reflective of changes in demographics in the South alone rather than representing a truthful picture of trends in the U.S. as a whole. 
+
+Lastly, the 'snapshot' of a changing demographic landscape in the U.S. remains a tad difficult to analyze. A clear takeaway here is that whites comprised the vast, vast majority of the U.S. population. Whether this encompasses the genocide of Native American populations or whether Natives were simply not accounted for remains unclear. Without an in-depth analysis of history, both cases seem plausible. In any case, the Northeast and Midwest regions of the U.S. display little change in the percentages of black persons while the South once again provides an expected and clear change in population makeup following the decade of emancipation. An additional point we may appreciate is how this graph provides a clearer picture of the ratio of white to black people in the South. An additional note: preceding emancipation, the slave population of the South appears to approach 50% of the total population. This contrasts to our percentages displayed by the summary table presenting only a third of the Southern population to be enslaved - a mere 80 years prior. This is significant for a time that saw only laborious, treacherous travel limited to the land and sea.
+
+### **Part 2**
+
+**Question:** *The enslavement of Native Americans preceded the Atlantic Slave Trade and imparted the necessary framework for which a 'prosperous' system of slavery could exist in the United States. What relationship if any exists between population numbers of white people and those of black slaves?*
+
+**Introduction:** The same dataset will be used for this section as Part 1: `census`. Columns to be evaluated will be:
+
+* `black_slaves`: The number of black_slaves
+
+* `white`: The number of whites
+
+* `region`: Regions of interest
+
+* `year`: Specifically 1850, 1860, & 1870
+
+
+**Approach:** To visualize a potential relationship between the numbers of slaves and whites, a scatter plot and regression line will be used. A regression line was chosen as it can be used to determine if there is trend between two continuous variables.
+
+The following functions will be applied to evaluate potential trends between the number of enslaved people and whites:
+
+* `group_by()`: To group by regions
+
+* `filter()`: To select only the years 1850, 1860, 1870
+
+* `nest()` / `mutate()` / `select()`: To be utilized in our regression analysis to nest our data, perform statistical operations, and to reduce the data to a computer-readable format.
+
+
+**Analysis:**
+
+```{r }
+
+lm_summary <- census %>% 
+  
+  nest(data = -region) %>% 
+  
+  mutate(
+    fit = map(data, ~lm(black_slaves ~ white, data = .x)), 
+    glance_out = map(fit, glance)
+    ) %>%
+  
+  select(region, glance_out) %>% 
+  unnest(cols = glance_out)
+
+
+census %>%  
+  
+  group_by(region) %>% 
+  
+  filter(year %in% seq(1790, 1850, 10)) %>%  
+  
+  ggplot(aes(white, black)) + 
+  geom_point() +
+  geom_smooth(method = 'lm', se = FALSE) + 
+  facet_wrap(vars(region), scales = 'free')
+
+lm_summary
+```
+
+**Discussion:** It appears that the only significant statistics are that of the Northeast and the South. Plausibly, a positive-relationship in data between the number of whites and enslaved persons was expected for the South as slavery was an institution vital to the growth of these region. Historically, as the number of white people increased in the South, so did the number of enslaved people as people were globally captured and imprisoned to the U.S. South to fuel a growing economy. For context, Learning For Justice - a resource provided with this data - reports that at the height of slavery, the slave-driven economy of the South rivaled economies around the world and at one point was the 6th largest economy in the *world*. 
+
+As for a significant statistic found for that of the Northeast, it remains unclear why there may be a trend between these two populations. It is worth noting that slavery as an institution was not fully localized to the South until the issue of slavery became increasingly political and increasingly polarized the North and South. This significant statistic may be representative of the need for slavery - albeit drastically less - adjacent to the South's.
